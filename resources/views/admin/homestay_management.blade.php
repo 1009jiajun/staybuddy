@@ -537,7 +537,7 @@
         if (typeof google !== 'undefined') return callback();
 
         const script = document.createElement('script');
-        script.src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyDrG4Wj-o0TWxo2Iozdjwj7Tm_mdY6V2Z8&callback=" + callback.name;
+        script.src = env('GOOGLE_MAPS_API_KEY') + callback.name;
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
