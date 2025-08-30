@@ -132,6 +132,11 @@ function imageHandler() {
                 headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                 body: formData
             });
+            if (!res.ok) {
+                const text = await res.text(); // fallback: read HTML error
+                throw new Error(text);
+            }
+
             const data = await res.json();
             if (data.media_id && data.url) {
                 const range = quill.getSelection(true);
