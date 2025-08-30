@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Http\Controllers\Admin; // Make sure the namespace is correct
+namespace App\Http\Controllers; // Make sure the namespace is correct
 
 use App\Http\Controllers\Controller; // Extend the base Controller
 use Illuminate\Http\Request;
