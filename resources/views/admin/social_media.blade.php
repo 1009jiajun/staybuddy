@@ -98,15 +98,53 @@ const quill = new Quill('#editor', {
   theme: 'snow',
   placeholder: 'Write something about your accommodation...',
   modules: {
-    toolbar: [
-      [{ header: [1, 2, false] }],
-      ['bold', 'italic', 'underline'],
-      ['link', 'image', 'video'],
-      [{ list: 'ordered' }, { list: 'bullet' }],
-      ['clean']
-    ]
+    toolbar: {
+      container: [
+        [{ header: [1, 2, false] }],
+        ['bold', 'italic', 'underline'],
+        ['link', 'image', 'video'],
+        [{ list: 'ordered' }, { list: 'bullet' }],
+        ['clean']
+      ],
+      handlers: {
+        image: imageHandler
+      }
+    }
   }
 });
+
+function imageHandler() {
+  const input = document.createElement('input');
+  input.setAttribute('type', 'file');
+  input.setAttribute('accept', 'image/*');
+  input.click();
+
+  input.onchange = async () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('{{ route("admin.upload-image") }}', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+        body: formData
+      });
+      const data = await res.json();
+
+      if (data.location) {
+        const range = quill.getSelection(true);
+        quill.insertEmbed(range.index, 'image', data.location);
+      } else {
+        showToast('⚠️ Failed to upload image', 'error');
+      }
+    } catch (err) {
+      showToast('⚠️ Error uploading image: ' + err.message, 'error');
+    }
+  };
+}
 
 // Handle form submission
 document.getElementById('xPostForm').addEventListener('submit', function(e) {
