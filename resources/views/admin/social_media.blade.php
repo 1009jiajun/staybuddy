@@ -3,33 +3,29 @@
 @section('page_title', 'Social Media Engagement')
 
 @section('styles')
-<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
-.x-post-form {
+  .x-post-form {
     max-width: 700px;
     margin: 20px auto;
     padding: 20px;
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
-}
-#editor {
-    height: 200px;
-    background: #fff;
-}
-.x-post-form label {
+  }
+  .x-post-form label {
     font-weight: 600;
     margin-bottom: 6px;
     display: block;
-}
-.x-post-form input {
+  }
+  .x-post-form textarea,
+  .x-post-form input {
     width: 100%;
     padding: 10px;
     border-radius: 6px;
     border: 1px solid #ddd;
     margin-bottom: 16px;
-}
-.x-post-form button {
+  }
+  .x-post-form button {
     background: #1da1f2;
     color: #fff;
     font-weight: 600;
@@ -37,10 +33,10 @@
     border: none;
     border-radius: 6px;
     cursor: pointer;
-}
-.x-post-form button:hover { background: #0d95e8; }
+  }
+  .x-post-form button:hover { background: #0d95e8; }
 
-.toast {
+  .toast {
     position: fixed;
     top: 20px;
     right: 20px;
@@ -50,27 +46,27 @@
     border-radius: 6px;
     display: none;
     z-index: 9999;
-}
-.toast.success { background: #28a745; }
-.toast.error { background: #dc3545; }
+  }
+  .toast.success { background: #28a745; }
+  .toast.error { background: #dc3545; }
 
-.x-login { margin: 20px auto; text-align: center; }
+  .x-login { margin: 20px auto; text-align: center; }
 </style>
 @endsection
 
 @section('content')
 <div class="x-login" style="{{ $hasToken ? 'display:none;' : 'display:block;' }}">
-    <button id="xLoginBtn" class="btn btn-primary">🔑 Login with X</button>
-    <p id="xStatus"></p>
+  <button id="xLoginBtn" class="btn btn-primary">🔑 Login with X</button>
+  <p id="xStatus"></p>
 </div>
 
 <div class="x-post-form" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
-    <h3>Promote Accommodation on X</h3>
-    <form id="xPostForm">
-        <label for="editor">Post Message:</label>
-        <div id="editor"></div>
-        <button type="submit">Post to X</button>
-    </form>
+  <h3>Promote Accommodation on X</h3>
+  <form id="xPostForm">
+    <label for="message">Post Message:</label>
+    <textarea id="message" name="message" rows="5" placeholder="Write something about your accommodation..."></textarea>
+    <button type="submit">Post to X</button>
+  </form>
 </div>
 
 <form action="{{ url('/admin/x-logout') }}" method="POST" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
@@ -82,111 +78,43 @@
 @endsection
 
 @section('scripts')
-<script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
 <script>
 const toast = document.getElementById('toast');
+
 function showToast(message, type = 'success') {
-    toast.textContent = message;
-    toast.className = 'toast ' + type;
-    toast.style.display = 'block';
-    setTimeout(() => toast.style.display = 'none', 4000);
+  toast.textContent = message;
+  toast.className = 'toast ' + type;
+  toast.style.display = 'block';
+  setTimeout(() => toast.style.display = 'none', 4000);
 }
 
-// Initialize Quill editor
-const quill = new Quill('#editor', {
-    theme: 'snow',
-    placeholder: 'Write something about your accommodation...',
-    modules: {
-        toolbar: {
-            container: [
-                [{ header: [1, 2, false] }],
-                ['bold', 'italic', 'underline'],
-                ['link', 'image', 'video'],
-                [{ list: 'ordered' }, { list: 'bullet' }],
-                ['clean']
-            ],
-            handlers: {
-                image: imageHandler
-            }
-        }
-    }
+// Redirect to backend for X OAuth
+document.getElementById('xLoginBtn').addEventListener('click', function() {
+  window.location.href = '/x-auth/redirect';
 });
 
-// Custom image handler
-function imageHandler() {
-    const input = document.createElement('input');
-    input.setAttribute('type', 'file');
-    input.setAttribute('accept', 'image/*');
-    input.click();
-
-    input.onchange = async () => {
-        const file = input.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch('{{ route("admin.upload-image-x") }}', {
-                method: 'POST',
-                headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
-                body: formData
-            });
-            if (!res.ok) {
-                const text = await res.text(); // fallback: read HTML error
-                throw new Error(text);
-            }
-
-            const data = await res.json();
-            if (data.media_id && data.url) {
-                const range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', data.url);
-                // Attach media_id to the inserted image
-                const imgs = quill.root.querySelectorAll('img');
-                const lastImg = imgs[imgs.length - 1];
-                if (lastImg) lastImg.dataset.mediaId = data.media_id;
-            } else {
-                showToast('⚠️ Failed to upload image to X', 'error');
-            }
-        } catch (err) {
-            showToast('⚠️ Error uploading image: ' + err.message, 'error');
-        }
-    };
-}
-
-// Handle form submission
+// Post message to X
 document.getElementById('xPostForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const plainText = quill.getText().trim();
-    if (!plainText) {
-        showToast('⚠️ Message cannot be empty', 'error');
-        return;
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(this).entries());
+
+  fetch('/post-to-x', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': '{{ csrf_token() }}'
+    },
+    body: JSON.stringify(data)
+  })
+  .then(res => res.json())
+  .then(result => {
+    if (result.data?.id) {
+      showToast('✅ Successfully posted to X!', 'success');
+    } else {
+      showToast('⚠️ Failed to post: ' + (result.error || 'Unknown error'), 'error');
     }
-
-    fetch('/post-to-x', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': '{{ csrf_token() }}'
-        },
-        body: JSON.stringify({ message_plain: plainText })
-    })
-    .then(res => res.json())
-    .then(result => {
-        if (result.data?.id) {
-            showToast('✅ Successfully posted to X!', 'success');
-            quill.setText(''); // Clear editor
-        } else {
-            console.error(result);
-            showToast('⚠️ Failed to post: ' + (result.error || 'Unknown error'), 'error');
-        }
-    })
-    .catch(err => showToast('⚠️ Error: ' + err.message, 'error'));
-});
-
-// X Login button
-document.getElementById('xLoginBtn')?.addEventListener('click', function() {
-    window.location.href = '/x-auth/redirect';
+  })
+  .catch(err => showToast('⚠️ Error: ' + err.message, 'error'));
 });
 </script>
 @endsection

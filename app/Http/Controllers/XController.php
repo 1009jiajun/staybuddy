@@ -63,12 +63,13 @@ class XController extends Controller
         return redirect('/admin/social-media')->with('x_logged_in', true);
     }
 
-   public function postToX(Request $request)
+
+    // Post message to X
+    // Step 3: Post to X
+    public function postToX(Request $request)
     {
         $request->validate([
             'message' => 'required|string|max:280',
-            'media_ids' => 'array',
-            'media_ids.*' => 'string'
         ]);
 
         if (!Storage::disk('local')->exists('x_token.json')) {
@@ -82,14 +83,10 @@ class XController extends Controller
             return response()->json(['error' => 'No X access token found. Login first.'], 400);
         }
 
-        $payload = ['text' => $request->message];
-
-        if (!empty($request->media_ids)) {
-            $payload['media'] = ['media_ids' => $request->media_ids];
-        }
-
         $response = Http::withToken($accessToken)
-            ->post('https://api.twitter.com/2/tweets', $payload);
+            ->post('https://api.twitter.com/2/tweets', [
+                'text' => $request->message,
+            ]);
 
         if ($response->failed()) {
             return response()->json(['error' => $response->json()], 400);
@@ -97,39 +94,6 @@ class XController extends Controller
 
         return response()->json($response->json());
     }
-
-    public function uploadImageToX(Request $request)
-    {
-        $request->validate([
-            'file' => 'required|image|max:5120',
-        ]);
-
-        if (!Storage::disk('local')->exists('x_token.json')) {
-            return response()->json(['error' => 'No X access token found. Login first.'], 400);
-        }
-
-        $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
-        $accessToken = $config['access_token'] ?? null;
-
-        $file = $request->file('file');
-        $content = file_get_contents($file->getRealPath());
-
-        $response = Http::withToken($accessToken)
-            ->attach('media', $content, $file->getClientOriginalName())
-            ->post('https://upload.twitter.com/1.1/media/upload.json');
-
-        $result = $response->json();
-
-        if (isset($result['error'])) {
-            return response()->json(['error' => $result['error']], 400);
-        }
-
-        return response()->json([
-            'media_id' => $result['media_id_string'],
-            'url' => url('storage/' . $file->store('uploads')), // optional preview
-        ]);
-    }
-
 
     public function logoutFromX()
     {
