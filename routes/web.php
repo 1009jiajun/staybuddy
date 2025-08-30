@@ -95,7 +95,8 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Social Media Engagement
     Route::get('/social-media', [AdminController::class, 'social_media'])->name('social_media');
 
-    Route::post('/upload-image', [UploadController::class, 'Quill'])->name('upload-image');
+    Route::post('/admin/upload-image-x', [XController::class, 'uploadImageToX'])->name('admin.upload-image-x');
+
 
     // User Management (if you create a separate AdminUserController)
     // Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');

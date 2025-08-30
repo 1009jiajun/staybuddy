@@ -82,7 +82,6 @@
 
 <div id="toast" class="toast"></div>
 @endsection
-
 @section('scripts')
 <script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
 <script>
@@ -107,12 +106,13 @@ const quill = new Quill('#editor', {
                 [{ list: 'ordered' }, { list: 'bullet' }],
                 ['clean']
             ],
-            handlers: {
-                image: imageHandler
-            }
+            handlers: { image: imageHandler }
         }
     }
 });
+
+// Array to store media_ids returned from X
+let mediaIds = [];
 
 function imageHandler() {
     const input = document.createElement('input');
@@ -128,17 +128,19 @@ function imageHandler() {
         formData.append('file', file);
 
         try {
-            const res = await fetch('{{ route("admin.upload-image") }}', {
+            const res = await fetch('{{ route("admin.upload-image-x") }}', {
                 method: 'POST',
                 headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
                 body: formData
             });
             const data = await res.json();
-            if (data.location) {
+
+            if (data.media_id) {
+                mediaIds.push(data.media_id); // Store media_id
                 const range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', data.location);
+                quill.insertEmbed(range.index, 'image', data.url); // Local preview
             } else {
-                showToast('⚠️ Failed to upload image', 'error');
+                showToast('⚠️ Failed to upload image to X', 'error');
             }
         } catch (err) {
             showToast('⚠️ Error uploading image: ' + err.message, 'error');
@@ -149,8 +151,8 @@ function imageHandler() {
 // Handle form submission
 document.getElementById('xPostForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    const htmlContent = quill.root.innerHTML;  // HTML content including images
-    const plainText = quill.getText();
+    const htmlContent = quill.root.innerHTML; 
+    const plainText = quill.getText().trim();
 
     fetch('/post-to-x', {
         method: 'POST',
@@ -158,22 +160,22 @@ document.getElementById('xPostForm').addEventListener('submit', function(e) {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': '{{ csrf_token() }}'
         },
-        body: JSON.stringify({ message: htmlContent, message_plain: plainText })
+        body: JSON.stringify({ 
+            message: plainText, 
+            media_ids: mediaIds 
+        })
     })
     .then(res => res.json())
     .then(result => {
         if (result.data?.id) {
             showToast('✅ Successfully posted to X!', 'success');
+            mediaIds = []; // Reset after success
+            quill.setText(''); // Clear editor
         } else {
             showToast('⚠️ Failed to post: ' + (result.error || 'Unknown error'), 'error');
         }
     })
     .catch(err => showToast('⚠️ Error: ' + err.message, 'error'));
-});
-
-// X Login button
-document.getElementById('xLoginBtn')?.addEventListener('click', function() {
-    window.location.href = '/x-auth/redirect';
 });
 </script>
 @endsection
