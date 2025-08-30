@@ -73,8 +73,6 @@
     </form>
 </div>
 
-</br>
-
 <form action="{{ url('/admin/x-logout') }}" method="POST" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
     @csrf
     <button type="submit">Logout from X</button>
@@ -94,7 +92,7 @@ function showToast(message, type = 'success') {
     setTimeout(() => toast.style.display = 'none', 4000);
 }
 
-// Initialize Quill editor with custom image handler
+// Initialize Quill editor
 const quill = new Quill('#editor', {
     theme: 'snow',
     placeholder: 'Write something about your accommodation...',
@@ -114,6 +112,7 @@ const quill = new Quill('#editor', {
     }
 });
 
+// Custom image handler
 function imageHandler() {
     const input = document.createElement('input');
     input.setAttribute('type', 'file');
@@ -134,11 +133,13 @@ function imageHandler() {
                 body: formData
             });
             const data = await res.json();
-            if (data.media_id) {
+            if (data.media_id && data.url) {
                 const range = quill.getSelection(true);
-                // Store media_id in quill attribute (optional, for sending later)
-                quill.insertEmbed(range.index, 'image', data.url); 
-                quill.root.dataset.mediaId = data.media_id;
+                quill.insertEmbed(range.index, 'image', data.url);
+                // Attach media_id to the inserted image
+                const imgs = quill.root.querySelectorAll('img');
+                const lastImg = imgs[imgs.length - 1];
+                if (lastImg) lastImg.dataset.mediaId = data.media_id;
             } else {
                 showToast('⚠️ Failed to upload image to X', 'error');
             }
@@ -148,13 +149,10 @@ function imageHandler() {
     };
 }
 
-
 // Handle form submission
 document.getElementById('xPostForm').addEventListener('submit', function(e) {
     e.preventDefault();
-    const htmlContent = quill.root.innerHTML;
-    const plainText = quill.getText().trim(); // must trim empty spaces
-
+    const plainText = quill.getText().trim();
     if (!plainText) {
         showToast('⚠️ Message cannot be empty', 'error');
         return;
@@ -166,12 +164,13 @@ document.getElementById('xPostForm').addEventListener('submit', function(e) {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': '{{ csrf_token() }}'
         },
-        body: JSON.stringify({ message_plain: quill.getText().trim() });
+        body: JSON.stringify({ message_plain: plainText })
     })
     .then(res => res.json())
     .then(result => {
         if (result.data?.id) {
             showToast('✅ Successfully posted to X!', 'success');
+            quill.setText(''); // Clear editor
         } else {
             console.error(result);
             showToast('⚠️ Failed to post: ' + (result.error || 'Unknown error'), 'error');
