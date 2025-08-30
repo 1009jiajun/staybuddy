@@ -8,7 +8,7 @@ use App\Http\Controllers\GoogleController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BookingController;
-use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\AdminController;
 use App\Http\Controllers\XController;
 Route::get('/', function () {
     return view('home');
