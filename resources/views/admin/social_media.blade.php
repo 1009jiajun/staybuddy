@@ -3,14 +3,19 @@
 @section('page_title', 'Social Media Engagement')
 
 @section('styles')
+<link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
 <style>
-  .x-post-form {
+.x-post-form {
     max-width: 700px;
     margin: 20px auto;
     padding: 20px;
     background: #fff;
     border-radius: 12px;
     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  }
+  #editor {
+    height: 200px;
+    background: #fff;
   }
   .x-post-form label {
     font-weight: 600;
@@ -63,8 +68,8 @@
 <div class="x-post-form" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
   <h3>Promote Accommodation on X</h3>
   <form id="xPostForm">
-    <label for="message">Post Message:</label>
-    <textarea id="message" name="message" rows="5" placeholder="Write something about your accommodation..."></textarea>
+    <label for="editor">Post Message:</label>
+    <div id="editor"></div>
     <button type="submit">Post to X</button>
   </form>
 </div>
@@ -78,57 +83,8 @@
 @endsection
 
 @section('scripts')
-<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
+<script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
 <script>
-tinymce.init({
-  selector: '#message',
-  menubar: false,
-  height: 320,
-  plugins: 'link lists image media table codesample code',
-  toolbar: 'undo redo | formatselect | bold italic underline | bullist numlist | link image media table | removeformat | code',
-  images_upload_url: '{{ route("admin.upload-image") }}', // our Laravel endpoint
-  automatic_uploads: true,
-  images_file_types: 'jpeg,jpg,png,gif,webp',
-  file_picker_types: 'image',
-  images_upload_credentials: true, // send cookies/CSRF
-  setup: (editor) => {
-    // ensure CSRF header for uploads
-    editor.on('BeforeUpload', (e) => {
-      e.blob(); // no-op; keeps TinyMCE happy
-    });
-  },
-  // Attach CSRF header to TinyMCE’s internal XHR
-  images_upload_handler: (blobInfo, progress) => new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.withCredentials = true;
-    xhr.open('POST', '{{ route("admin.upload-image") }}');
-    xhr.setRequestHeader('X-CSRF-TOKEN', '{{ csrf_token() }}');
-
-    xhr.upload.onprogress = (e) => {
-      progress(e.loaded / e.total * 100);
-    };
-
-    xhr.onload = () => {
-      if (xhr.status < 200 || xhr.status >= 300) {
-        return reject('HTTP Error: ' + xhr.status);
-      }
-      let json = {};
-      try { json = JSON.parse(xhr.responseText); } catch (err) {}
-      if (!json || typeof json.location !== 'string') {
-        return reject('Invalid JSON: ' + xhr.responseText);
-      }
-      resolve(json.location); // TinyMCE will insert the image using this URL
-    };
-
-    xhr.onerror = () => reject('Image upload failed due to a XHR Transport error.');
-
-    const formData = new FormData();
-    formData.append('file', blobInfo.blob(), blobInfo.filename());
-    xhr.send(formData);
-  })
-});
-
-// Keep your existing toast/handlers…
 const toast = document.getElementById('toast');
 function showToast(message, type = 'success') {
   toast.textContent = message;
@@ -137,17 +93,26 @@ function showToast(message, type = 'success') {
   setTimeout(() => toast.style.display = 'none', 4000);
 }
 
-// Login button
-document.getElementById('xLoginBtn')?.addEventListener('click', function() {
-  window.location.href = '/x-auth/redirect';
+// Initialize Quill editor
+const quill = new Quill('#editor', {
+  theme: 'snow',
+  placeholder: 'Write something about your accommodation...',
+  modules: {
+    toolbar: [
+      [{ header: [1, 2, false] }],
+      ['bold', 'italic', 'underline'],
+      ['link', 'image', 'video'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      ['clean']
+    ]
+  }
 });
 
-// Post to X (we’ll send HTML; if you need plain text, strip it below)
-document.getElementById('xPostForm')?.addEventListener('submit', function(e) {
+// Handle form submission
+document.getElementById('xPostForm').addEventListener('submit', function(e) {
   e.preventDefault();
-  const html = tinymce.get('message').getContent();          // HTML with images/styles
-  const plain = tinymce.get('message').getContent({ format: 'text' }); // fallback for X
-  const payload = { message: html, message_plain: plain };
+  const htmlContent = quill.root.innerHTML;  // HTML content including images
+  const plainText = quill.getText();         // plain text fallback
 
   fetch('/post-to-x', {
     method: 'POST',
@@ -155,7 +120,7 @@ document.getElementById('xPostForm')?.addEventListener('submit', function(e) {
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': '{{ csrf_token() }}'
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify({ message: htmlContent, message_plain: plainText })
   })
   .then(res => res.json())
   .then(result => {
@@ -167,6 +132,38 @@ document.getElementById('xPostForm')?.addEventListener('submit', function(e) {
   })
   .catch(err => showToast('⚠️ Error: ' + err.message, 'error'));
 });
+
+// X Login button
+document.getElementById('xLoginBtn')?.addEventListener('click', function() {
+  window.location.href = '/x-auth/redirect';
+});
+
+const toolbar = quill.getModule('toolbar');
+toolbar.addHandler('image', () => {
+  const input = document.createElement('input');
+  input.setAttribute('type', 'file');
+  input.setAttribute('accept', 'image/*');
+  input.click();
+
+  input.onchange = async () => {
+    const file = input.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const res = await fetch('{{ route("admin.upload-image") }}', {
+      method: 'POST',
+      headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}' },
+      body: formData
+    });
+    const data = await res.json();
+    if(data.location) {
+      const range = quill.getSelection();
+      quill.insertEmbed(range.index, 'image', data.location);
+    } else {
+      showToast('⚠️ Failed to upload image', 'error');
+    }
+  };
+});
+
 </script>
 @endsection
-

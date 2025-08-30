@@ -8,7 +8,7 @@ use App\Http\Controllers\Controller;
 
 class UploadController extends Controller
 {
-    public function tinymce(Request $request)
+    public function Quill(Request $request)
     {
         $request->validate([
             'file' => ['required','image','mimes:jpeg,jpg,png,gif,webp','max:4096'], // 4MB
