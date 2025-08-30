@@ -78,9 +78,58 @@
 @endsection
 
 @section('scripts')
+<script src="https://cdn.tiny.cloud/1/no-api-key/tinymce/6/tinymce.min.js" referrerpolicy="origin"></script>
 <script>
-const toast = document.getElementById('toast');
+tinymce.init({
+  selector: '#message',
+  menubar: false,
+  height: 320,
+  plugins: 'link lists image media table codesample code',
+  toolbar: 'undo redo | formatselect | bold italic underline | bullist numlist | link image media table | removeformat | code',
+  images_upload_url: '{{ route("admin.upload-image") }}', // our Laravel endpoint
+  automatic_uploads: true,
+  images_file_types: 'jpeg,jpg,png,gif,webp',
+  file_picker_types: 'image',
+  images_upload_credentials: true, // send cookies/CSRF
+  setup: (editor) => {
+    // ensure CSRF header for uploads
+    editor.on('BeforeUpload', (e) => {
+      e.blob(); // no-op; keeps TinyMCE happy
+    });
+  },
+  // Attach CSRF header to TinyMCE’s internal XHR
+  images_upload_handler: (blobInfo, progress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.withCredentials = true;
+    xhr.open('POST', '{{ route("admin.upload-image") }}');
+    xhr.setRequestHeader('X-CSRF-TOKEN', '{{ csrf_token() }}');
 
+    xhr.upload.onprogress = (e) => {
+      progress(e.loaded / e.total * 100);
+    };
+
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        return reject('HTTP Error: ' + xhr.status);
+      }
+      let json = {};
+      try { json = JSON.parse(xhr.responseText); } catch (err) {}
+      if (!json || typeof json.location !== 'string') {
+        return reject('Invalid JSON: ' + xhr.responseText);
+      }
+      resolve(json.location); // TinyMCE will insert the image using this URL
+    };
+
+    xhr.onerror = () => reject('Image upload failed due to a XHR Transport error.');
+
+    const formData = new FormData();
+    formData.append('file', blobInfo.blob(), blobInfo.filename());
+    xhr.send(formData);
+  })
+});
+
+// Keep your existing toast/handlers…
+const toast = document.getElementById('toast');
 function showToast(message, type = 'success') {
   toast.textContent = message;
   toast.className = 'toast ' + type;
@@ -88,15 +137,17 @@ function showToast(message, type = 'success') {
   setTimeout(() => toast.style.display = 'none', 4000);
 }
 
-// Redirect to backend for X OAuth
-document.getElementById('xLoginBtn').addEventListener('click', function() {
+// Login button
+document.getElementById('xLoginBtn')?.addEventListener('click', function() {
   window.location.href = '/x-auth/redirect';
 });
 
-// Post message to X
-document.getElementById('xPostForm').addEventListener('submit', function(e) {
+// Post to X (we’ll send HTML; if you need plain text, strip it below)
+document.getElementById('xPostForm')?.addEventListener('submit', function(e) {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(this).entries());
+  const html = tinymce.get('message').getContent();          // HTML with images/styles
+  const plain = tinymce.get('message').getContent({ format: 'text' }); // fallback for X
+  const payload = { message: html, message_plain: plain };
 
   fetch('/post-to-x', {
     method: 'POST',
@@ -104,7 +155,7 @@ document.getElementById('xPostForm').addEventListener('submit', function(e) {
       'Content-Type': 'application/json',
       'X-CSRF-TOKEN': '{{ csrf_token() }}'
     },
-    body: JSON.stringify(data)
+    body: JSON.stringify(payload)
   })
   .then(res => res.json())
   .then(result => {
@@ -118,3 +169,4 @@ document.getElementById('xPostForm').addEventListener('submit', function(e) {
 });
 </script>
 @endsection
+

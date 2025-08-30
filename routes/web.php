@@ -10,6 +10,7 @@ use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\XController;
+use App\Http\Controllers\UploadController;
 Route::get('/', function () {
     return view('home');
 });
@@ -94,6 +95,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // Social Media Engagement
     Route::get('/social-media', [AdminController::class, 'social_media'])->name('social_media');
 
+    Route::post('/upload-image', [UploadController::class, 'tinymce'])->name('upload-image');
 
     // User Management (if you create a separate AdminUserController)
     // Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
