@@ -486,9 +486,9 @@ class AdminController extends Controller
                 try {
                     // Method 1: Using asMultipart() - Recommended
                     $uploadResponse = Http::withToken($accessToken)
-                        ->asMultipart()
-                        ->attach('media', file_get_contents($image->getPathname()), $image->getClientOriginalName())
-                        ->post('https://upload.twitter.com/1.1/media/upload.json');
+                    ->timeout(120) // 120 seconds instead of 30
+                    ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
+                    ->post('https://upload.twitter.com/1.1/media/upload.json');
 
                     // Alternative Method 2: Using direct form data
                     /*
