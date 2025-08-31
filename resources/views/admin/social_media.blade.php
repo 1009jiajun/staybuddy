@@ -129,7 +129,7 @@ document.getElementById('xPostForm')?.addEventListener('submit', async function(
   }
 
   for (let i = 0; i < imageFiles.length; i++) {
-    formData.append(`images[${i}]`, imageFiles[i]);  // ✅ indexed key
+    formData.append("images[]", imageFiles[i]);  // ✅ correct
   }
 
   try {
