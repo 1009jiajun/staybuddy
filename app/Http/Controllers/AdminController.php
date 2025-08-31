@@ -451,28 +451,26 @@ class AdminController extends Controller
 
     // Post message to X
     // Step 3: Post to X
-    public function postToX(Request $request)
+   public function postToX(Request $request)
     {
         try {
+            // Validate input
             $request->validate([
                 'message' => 'required|string',
-                'images'  => 'nullable|array',
+                'images'  => 'nullable|array|max:4',
+                'images.*'=> 'file|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max per image
             ]);
 
-            // Check for stored OAuth2 token
+            // Load OAuth2 user-context token
             if (!Storage::disk('local')->exists('x_token.json')) {
-                return response()->json([
-                    'error' => 'No X credentials found. Login first.'
-                ], 400);
+                return response()->json(['error' => 'No X credentials found. Login first.'], 400);
             }
 
             $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
             $accessToken = $config['access_token'] ?? null;
 
             if (!$accessToken) {
-                return response()->json([
-                    'error' => 'Missing access token. Please re-login.'
-                ], 400);
+                return response()->json(['error' => 'Missing access token. Please re-login.'], 400);
             }
 
             $message = $request->message;
@@ -486,15 +484,14 @@ class AdminController extends Controller
 
             $mediaIds = [];
 
-            // Step 1: Upload media using v2 endpoint
+            // Upload images (if any) using new chunked endpoints
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $image) {
-                    if (count($mediaIds) >= 4) break;
-                    $mediaIds[] = $this->uploadMediaV2($image, $accessToken);
+                    $mediaIds[] = $this->uploadMediaChunked($image, $accessToken);
                 }
             }
 
-            // Step 2: Create tweet with media_ids
+            // Create tweet with media
             $payload = ['text' => $message];
             if (!empty($mediaIds)) {
                 $payload['media'] = ['media_ids' => $mediaIds];
@@ -509,7 +506,9 @@ class AdminController extends Controller
                     'response' => $tweetResponse->json(),
                     'payload' => $payload
                 ]);
-                return response()->json(['error' => $tweetResponse->json()], 400);
+
+                $errorMsg = $tweetResponse->json()['errors'][0]['detail'] ?? 'Unknown error';
+                return response()->json(['error' => $errorMsg], $tweetResponse->status());
             }
 
             $jsonResponse = $tweetResponse->json();
@@ -530,25 +529,41 @@ class AdminController extends Controller
         }
     }
 
-
-    protected function uploadMediaV2($file, $accessToken)
+    /**
+     * Upload a file to X using the new dedicated chunked endpoints
+     */
+    protected function uploadMediaChunked($file, $accessToken)
     {
-        $response = Http::withToken($accessToken)
-            ->attach('file', fopen($file->getPathname(), 'r'), $file->getClientOriginalName())
-            ->post('https://upload.twitter.com/2/media', [
-                'media_category' => 'tweet_image',
-            ]);
+        $fileSize = $file->getSize();
+        $mimeType = $file->getMimeType();
 
-        if ($response->failed()) {
-            throw new \Exception('Media upload failed: ' . json_encode($response->json()));
+        // Step 1: Initialize
+        $initResponse = Http::withToken($accessToken)
+            ->post('https://api.x.com/2/media/upload/initialize', [
+                'media_type' => $mimeType,
+                'total_bytes' => $fileSize,
+                'media_category' => 'tweet_image'
+            ])->throw()->json();
+
+        $mediaId = $initResponse['media_id'] ?? null;
+        if (!$mediaId) {
+            throw new \Exception('Media initialization failed: ' . json_encode($initResponse));
         }
 
-        $data = $response->json();
-        if (empty($data['data']['media_id'])) {
-            throw new \Exception('No media_id returned: ' . json_encode($data));
-        }
+        // Step 2: Append (single chunk for small images)
+        $chunkData = fopen($file->getPathname(), 'r');
+        $appendResponse = Http::withToken($accessToken)
+            ->attach('media', $chunkData, $file->getClientOriginalName())
+            ->post("https://api.x.com/2/media/upload/{$mediaId}/append", [
+                'segment_index' => 0
+            ])->throw()->json();
 
-        return $data['data']['media_id'];
+        // Step 3: Finalize
+        $finalResponse = Http::withToken($accessToken)
+            ->post("https://api.x.com/2/media/upload/{$mediaId}/finalize")
+            ->throw()->json();
+
+        return $mediaId;
     }
 
 
