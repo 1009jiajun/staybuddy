@@ -490,33 +490,7 @@ class AdminController extends Controller
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $image) {
                     if (count($mediaIds) >= 4) break;
-
-                    // Upload media
-                    $uploadResponse = Http::withToken($accessToken)
-                        ->attach('file', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
-                        ->post('https://api.twitter.com/2/media/upload', [
-                            'media_category' => 'tweet_image'
-                        ]);
-
-                    if ($uploadResponse->failed()) {
-                        \Log::error('X Media Upload Failed', [
-                            'status' => $uploadResponse->status(),
-                            'response' => $uploadResponse->json(),
-                            'image' => $image->getClientOriginalName()
-                        ]);
-                        return response()->json([
-                            'error' => 'Media upload failed',
-                            'details' => $uploadResponse->json(),
-                            'status' => $uploadResponse->status()
-                        ], 400);
-                    }
-
-                    $mediaData = $uploadResponse->json();
-                    if (!empty($mediaData['data']['media_id'])) {
-                        $mediaIds[] = $mediaData['data']['media_id'];
-                    } else {
-                        \Log::warning('No media_id returned', $mediaData);
-                    }
+                    $mediaIds[] = $this->uploadMediaV2($image, $accessToken);
                 }
             }
 
@@ -556,6 +530,26 @@ class AdminController extends Controller
         }
     }
 
+
+    protected function uploadMediaV2($file, $accessToken)
+    {
+        $response = Http::withToken($accessToken)
+            ->attach('file', fopen($file->getPathname(), 'r'), $file->getClientOriginalName())
+            ->post('https://upload.twitter.com/2/media', [
+                'media_category' => 'tweet_image',
+            ]);
+
+        if ($response->failed()) {
+            throw new \Exception('Media upload failed: ' . json_encode($response->json()));
+        }
+
+        $data = $response->json();
+        if (empty($data['data']['media_id'])) {
+            throw new \Exception('No media_id returned: ' . json_encode($data));
+        }
+
+        return $data['data']['media_id'];
+    }
 
 
     public function logoutFromX()
