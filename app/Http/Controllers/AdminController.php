@@ -460,6 +460,14 @@ class AdminController extends Controller
                 'images'    => 'nullable|array',  // 👈 must declare as array
             ]);
 
+            $filePath = Storage::disk('local')->path('x_token.json');
+            if (!file_exists($filePath)) {
+                return response()->json([
+                    'error' => 'No X credentials found. Login first.',
+                    'debug_path' => $filePath,
+                    'real_files' => glob(storage_path('app/private/*'))
+                ], 400);
+            }
 
             if (!Storage::disk('local')->exists('x_token.json')) {
                 return response()->json(['error' => 'No X credentials found. Login first.'], 400);
