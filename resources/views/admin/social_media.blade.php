@@ -106,7 +106,7 @@ const quill = new Quill('#editor', {
 
 // Redirect to backend for X OAuth
 document.getElementById('xLoginBtn')?.addEventListener('click', function() {
-  window.location.href = '/x-auth/redirect';
+  window.location.href = '/admin/x-auth/redirect';
 });
 
 // Post message to X
