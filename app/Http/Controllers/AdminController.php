@@ -454,6 +454,26 @@ class AdminController extends Controller
     public function postToX(Request $request)
     {
         try {
+
+            // Temporary debug response
+            if ($request->hasFile('images')) {
+                return response()->json([
+                    'message' => $request->message,
+                    'files'   => collect($request->file('images'))->map(function ($file) {
+                        return [
+                            'name' => $file->getClientOriginalName(),
+                            'mime' => $file->getClientMimeType(),
+                            'size' => $file->getSize(),
+                        ];
+                    }),
+                ]);
+            }
+
+            return response()->json([
+                'message' => $request->message,
+                'all'     => $request->all(),
+                'files'   => $request->allFiles(),
+            ]);
             $request->validate([
                 'message' => 'required|string',
                 'images'   => 'nullable',
