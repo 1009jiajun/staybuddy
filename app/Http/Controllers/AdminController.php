@@ -387,7 +387,7 @@ class AdminController extends Controller
     public function social_media()
     {
         // Check if token exists
-        $hasToken = Storage::disk('public')->exists('x_token.json');
+        $hasToken = Storage::disk('local')->exists('x_token.json');
 
         return view('admin.social_media', compact('hasToken'));        
     }
@@ -438,11 +438,11 @@ class AdminController extends Controller
         }
 
         // Merge with OAuth1 tokens if already stored
-        $stored = json_decode(Storage::disk('public')->get('x_token.json', '{}'), true);
+        $stored = json_decode(Storage::disk('local')->get('x_token.json', '{}'), true);
         $stored['access_token'] = $tokens['access_token'];
         $stored['refresh_token'] = $tokens['refresh_token'] ?? null;
 
-        Storage::disk('public')->put('x_token.json', json_encode($stored));
+        Storage::disk('local')->put('x_token.json', json_encode($stored));
 
         return redirect('/admin/social-media')->with('x_logged_in', true);
     }
@@ -461,11 +461,11 @@ class AdminController extends Controller
             ]);
 
 
-            if (!Storage::disk('public')->exists('x_token.json')) {
+            if (!Storage::disk('local')->exists('x_token.json')) {
                 return response()->json(['error' => 'No X credentials found. Login first.'], 400);
             }
 
-            $config = json_decode(Storage::disk('public')->get('x_token.json'), true);
+            $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
             $accessToken = $config['access_token'] ?? null; // v2 posting
             $oauthToken = $config['oauth_token'] ?? null;   // v1.1 media upload
             $oauthSecret = $config['oauth_token_secret'] ?? null;
@@ -562,8 +562,8 @@ class AdminController extends Controller
 
     public function logoutFromX()
     {
-        if (Storage::disk('public')->exists('x_token.json')) {
-            Storage::disk('public')->delete('x_token.json');
+        if (Storage::disk('local')->exists('x_token.json')) {
+            Storage::disk('local')->delete('x_token.json');
         }
 
         return redirect('/admin/social-media')->with('success', 'Logged out from X successfully!');
