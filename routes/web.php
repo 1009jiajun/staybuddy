@@ -9,7 +9,6 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\AdminController;
-use App\Http\Controllers\XController;
 Route::get('/', function () {
     return view('home');
 });
@@ -48,25 +47,6 @@ Route::post('/payment/callback', [PaymentController::class, 'handleCallback'])->
 Route::get('/payment/return', [PaymentController::class, 'handleReturn'])->name('payment.return');
 
 
-Route::post('/save-x-token', [XController::class, 'saveToken']);
-Route::post('/post-to-x', [XController::class, 'postToX']);
-Route::post('/admin/x-logout', [XController::class, 'logoutFromX'])->name('x_logout');
-
-
-// OAuth 2.0 login routes
-Route::get('/x-auth/redirect', [XController::class, 'redirectToX'])->name('x-auth.redirect');
-Route::get('/x-auth/callback', [XController::class, 'handleXCallback'])->name('x-auth.callback');
-
-Route::get('/test-storage', function() {
-    try {
-        Storage::disk('local')->put('x_token_test.json', 'ok');
-        return Storage::disk('local')->exists('x_token_test.json') ? 'Writable' : 'Not writable';
-    } catch (\Exception $e) {
-        return 'Error: ' . $e->getMessage();
-    }
-});
-
-
 // routes/web.php
 
 Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(function () {
@@ -93,11 +73,13 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
 
     // Social Media Engagement
     Route::get('/social-media', [AdminController::class, 'social_media'])->name('social_media');
+    Route::post('/post-to-x', [AdminController::class, 'postToX'])->name('post_to_x');
+    Route::post('/x-logout', [AdminController::class, 'logoutFromX'])->name('x_logout');
 
 
-    // User Management (if you create a separate AdminUserController)
-    // Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
-    // Route::resource('users', AdminUserController::class); // Make sure you create this controller
+    // OAuth 2.0 login routes
+    Route::get('/x-auth/redirect', [AdminController::class, 'redirectToX'])->name('x-auth.redirect');
+    Route::get('/x-auth/callback', [AdminController::class, 'handleXCallback'])->name('x-auth.callback');
 });
 
 

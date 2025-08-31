@@ -3,6 +3,7 @@
 @section('page_title', 'Social Media Engagement')
 
 @section('styles')
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
 <style>
   .x-post-form {
     max-width: 700px;
@@ -17,8 +18,8 @@
     margin-bottom: 6px;
     display: block;
   }
-  .x-post-form textarea,
-  .x-post-form input {
+  .x-post-form input,
+  .x-post-form textarea {
     width: 100%;
     padding: 10px;
     border-radius: 6px;
@@ -50,6 +51,11 @@
   .toast.success { background: #28a745; }
   .toast.error { background: #dc3545; }
 
+  .quill-editor {
+    height: 200px;
+    margin-bottom: 16px;
+  }
+
   .x-login { margin: 20px auto; text-align: center; }
 </style>
 @endsection
@@ -62,9 +68,13 @@
 
 <div class="x-post-form" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
   <h3>Promote Accommodation on X</h3>
-  <form id="xPostForm">
+  <form id="xPostForm" enctype="multipart/form-data">
     <label for="message">Post Message:</label>
-    <textarea id="message" name="message" rows="5" placeholder="Write something about your accommodation..."></textarea>
+    <div id="editor" class="quill-editor"></div>
+
+    <label for="image">Upload Images (max 4):</label>
+    <input type="file" id="imageInput" name="images[]" accept="image/*" multiple>
+
     <button type="submit">Post to X</button>
   </form>
 </div>
@@ -78,6 +88,7 @@
 @endsection
 
 @section('scripts')
+<script src="https://cdn.quilljs.com/1.3.7/quill.js"></script>
 <script>
 const toast = document.getElementById('toast');
 
@@ -88,33 +99,59 @@ function showToast(message, type = 'success') {
   setTimeout(() => toast.style.display = 'none', 4000);
 }
 
+const quill = new Quill('#editor', {
+  theme: 'snow',
+  placeholder: "Write something about your accommodation..."
+});
+
 // Redirect to backend for X OAuth
-document.getElementById('xLoginBtn').addEventListener('click', function() {
+document.getElementById('xLoginBtn')?.addEventListener('click', function() {
   window.location.href = '/x-auth/redirect';
 });
 
 // Post message to X
-document.getElementById('xPostForm').addEventListener('submit', function(e) {
+document.getElementById('xPostForm')?.addEventListener('submit', async function(e) {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(this).entries());
 
-  fetch('/post-to-x', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': '{{ csrf_token() }}'
-    },
-    body: JSON.stringify(data)
-  })
-  .then(res => res.json())
-  .then(result => {
+  const plainText = quill.getText().trim(); // tweet text (max 280 chars)
+  if (!plainText) {
+    showToast("⚠️ Message cannot be empty", "error");
+    return;
+  }
+
+  let formData = new FormData();
+  formData.append("message", plainText);
+
+  const imageFiles = document.getElementById('imageInput').files;
+  if (imageFiles.length > 4) {
+    showToast("⚠️ You can only upload up to 4 images.", "error");
+    return;
+  }
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    formData.append("images[]", imageFiles[i]);
+  }
+
+  try {
+    let res = await fetch('/admin/post-to-x', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-TOKEN': '{{ csrf_token() }}'
+      },
+      body: formData
+    });
+
+    let result = await res.json();
     if (result.data?.id) {
-      showToast('✅ Successfully posted to X!', 'success');
+      showToast("✅ Successfully posted to X!", "success");
+      quill.setText("");
+      document.getElementById("imageInput").value = "";
     } else {
-      showToast('⚠️ Failed to post: ' + (result.error || 'Unknown error'), 'error');
+      showToast("⚠️ Failed to post: " + (result.error || 'Unknown error'), "error");
     }
-  })
-  .catch(err => showToast('⚠️ Error: ' + err.message, 'error'));
+  } catch (err) {
+    showToast("⚠️ Error: " + err.message, "error");
+  }
 });
 </script>
 @endsection
