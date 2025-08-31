@@ -488,7 +488,7 @@ class AdminController extends Controller
                     $uploadResponse = Http::withToken($accessToken)
                     ->timeout(120) // 120 seconds instead of 30
                     ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
-                    ->post('https://upload.twitter.com/1.1/media/upload.json');
+                    ->post('https://api.twitter.com/2/media/upload');
 
                     // Alternative Method 2: Using direct form data
                     /*
