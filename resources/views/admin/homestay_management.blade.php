@@ -533,11 +533,12 @@
 
 @section('scripts')
 <script>
+    const GOOGLE_MAPS_API_KEY = "{{ env('GOOGLE_MAPS_API_KEY') }}"
     function loadGoogleMapsScript(callback) {
         if (typeof google !== 'undefined') return callback();
 
         const script = document.createElement('script');
-        script.src = env('GOOGLE_MAPS_API_KEY') + callback.name;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&callback=${callback.name}`;
         script.async = true;
         script.defer = true;
         document.head.appendChild(script);
