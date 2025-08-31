@@ -455,6 +455,8 @@ class AdminController extends Controller
     {
         try {
 
+            dd($request->all(), $request->allFiles());
+
             $request->validate([
                 'message'   => 'required|string',
                 'images'    => 'nullable|array',  // 👈 must declare as array
