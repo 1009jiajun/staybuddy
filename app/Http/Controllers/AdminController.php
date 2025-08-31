@@ -453,41 +453,41 @@ class AdminController extends Controller
     // Step 3: Post to X
     public function postToX(Request $request)
     {
-        $request->validate([
-            'message' => 'required|string',
-            'images.*' => 'nullable|image|max:5120', // each max 5MB
-        ]);
+        try {
+            $request->validate([
+                'message' => 'required|string',
+                'images.*' => 'nullable|image|max:5120', // each max 5MB
+            ]);
 
-        if (!Storage::disk('local')->exists('x_token.json')) {
-            return response()->json(['error' => 'No X credentials found. Login first.'], 400);
-        }
+            if (!Storage::disk('local')->exists('x_token.json')) {
+                return response()->json(['error' => 'No X credentials found. Login first.'], 400);
+            }
 
-        $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
-        $accessToken = $config['access_token'] ?? null; // v2 posting
-        $oauthToken = $config['oauth_token'] ?? null;   // v1.1 media upload
-        $oauthSecret = $config['oauth_token_secret'] ?? null;
+            $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
+            $accessToken = $config['access_token'] ?? null; // v2 posting
+            $oauthToken = $config['oauth_token'] ?? null;   // v1.1 media upload
+            $oauthSecret = $config['oauth_token_secret'] ?? null;
 
-        if (!$accessToken || !$oauthToken || !$oauthSecret) {
-            return response()->json(['error' => 'Missing required tokens. Please re-login.'], 400);
-        }
+            if (!$accessToken || !$oauthToken || !$oauthSecret) {
+                return response()->json(['error' => 'Missing required tokens. Please re-login.'], 400);
+            }
 
-        $message = $request->message;
-        $extraNotice = null;
+            $message = $request->message;
+            $extraNotice = null;
 
-        // ✅ Truncate if > 280 chars
-        if (mb_strlen($message, 'UTF-8') > 280) {
-            $extraNotice = "Message truncated. " . (mb_strlen($message, 'UTF-8') - 280) . " characters not sent.";
-            $message = mb_substr($message, 0, 280, 'UTF-8');
-        }
+            // ✅ Truncate if > 280 chars
+            if (mb_strlen($message, 'UTF-8') > 280) {
+                $extraNotice = "Message truncated. " . (mb_strlen($message, 'UTF-8') - 280) . " characters not sent.";
+                $message = mb_substr($message, 0, 280, 'UTF-8');
+            }
 
-        $mediaIds = [];
+            $mediaIds = [];
 
-        // ✅ Handle multiple image uploads (max 4)
-        if ($request->hasFile('images')) {
-            foreach ($request->file('images') as $image) {
-                if (count($mediaIds) >= 4) break;
+            // ✅ Handle multiple image uploads (max 4)
+            if ($request->hasFile('images')) {
+                foreach ($request->file('images') as $image) {
+                    if (count($mediaIds) >= 4) break;
 
-                try {
                     $uploadResponse = Http::withOAuth1(
                             env('X_CLIENT_ID'),
                             env('X_CLIENT_SECRET'),
@@ -518,24 +518,15 @@ class AdminController extends Controller
                     } else {
                         \Log::warning('No media_id_string in response', $mediaData);
                     }
-
-                } catch (\Exception $e) {
-                    \Log::error('X Image Upload Exception', [
-                        'error' => $e->getMessage(),
-                        'image' => $image->getClientOriginalName()
-                    ]);
-                    return response()->json(['error' => 'Image upload exception: ' . $e->getMessage()], 500);
                 }
             }
-        }
 
-        // ✅ Create tweet with optional media
-        $payload = ['text' => $message];
-        if (!empty($mediaIds)) {
-            $payload['media'] = ['media_ids' => $mediaIds];
-        }
+            // ✅ Create tweet with optional media
+            $payload = ['text' => $message];
+            if (!empty($mediaIds)) {
+                $payload['media'] = ['media_ids' => $mediaIds];
+            }
 
-        try {
             $response = Http::withToken($accessToken) // v2 post
                 ->post('https://api.twitter.com/2/tweets', $payload);
 
@@ -555,11 +546,17 @@ class AdminController extends Controller
 
             return response()->json($jsonResponse);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'details' => $e->errors()
+            ], 422);
         } catch (\Exception $e) {
-            \Log::error('X Tweet Post Exception', ['error' => $e->getMessage()]);
-            return response()->json(['error' => 'Tweet post failed: ' . $e->getMessage()], 500);
+            \Log::error('X Post Exception', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Server error: ' . $e->getMessage()], 500);
         }
     }
+
 
     public function logoutFromX()
     {
