@@ -456,7 +456,8 @@ class AdminController extends Controller
         try {
             $request->validate([
                 'message' => 'required|string',
-                'images.*' => 'nullable|image|max:5120', // each max 5MB
+                'images'   => 'nullable|array|max:4',
+                'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
             ]);
 
             if (!Storage::disk('local')->exists('x_token.json')) {
