@@ -508,6 +508,7 @@ class AdminController extends Controller
                             'response' => $uploadResponse->json(),
                             'image' => $image->getClientOriginalName()
                         ]);
+                        error_log("X Image Upload Failed: " . $uploadResponse->body());
                         return response()->json([
                             'error' => 'Image upload failed', 
                             'details' => $uploadResponse->json(),
@@ -529,6 +530,7 @@ class AdminController extends Controller
                         'error' => $e->getMessage(),
                         'image' => $image->getClientOriginalName()
                     ]);
+                    error_log("X Image Upload Exception: " . $e->getMessage());
                     return response()->json(['error' => 'Image upload exception: ' . $e->getMessage()], 500);
                 }
             }
@@ -550,6 +552,7 @@ class AdminController extends Controller
                     'response' => $response->json(),
                     'payload' => $payload
                 ]);
+                error_log("X Tweet Post Failed: " . $response->body());
                 return response()->json(['error' => $response->json()], 400);
             }
 
@@ -562,6 +565,7 @@ class AdminController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('X Tweet Post Exception', ['error' => $e->getMessage()]);
+            error_log("X Tweet Post Exception: " . $e->getMessage());
             return response()->json(['error' => 'Tweet post failed: ' . $e->getMessage()], 500);
         }
     }
