@@ -132,6 +132,10 @@ document.getElementById('xPostForm')?.addEventListener('submit', async function(
     formData.append("images[]", imageFiles[i]);  // ✅ correct
   }
 
+  for (let [key, value] of formData.entries()) {
+    console.log(key, value, value instanceof File);
+  }
+
   try {
     let res = await fetch('/admin/post-to-x', {
       method: 'POST',
