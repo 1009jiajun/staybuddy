@@ -452,7 +452,7 @@ class AdminController extends Controller
     public function postToX(Request $request)
     {
         $request->validate([
-            'message' => 'required|string|max:280',
+            'message' => 'required|string',
             'images.*' => 'nullable|image|max:5120', // each max 5MB
         ]);
 
@@ -467,12 +467,21 @@ class AdminController extends Controller
             return response()->json(['error' => 'No X access token found. Login first.'], 400);
         }
 
+        $message = $request->message;
+        $extraNotice = null;
+
+        // ✅ Truncate if > 280 chars
+        if (mb_strlen($message, 'UTF-8') > 280) {
+            $extraNotice = "Message truncated. " . (mb_strlen($message, 'UTF-8') - 280) . " characters not sent.";
+            $message = mb_substr($message, 0, 280, 'UTF-8');
+        }
+
         $mediaIds = [];
 
         // ✅ Handle multiple image uploads (max 4)
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
-                if (count($mediaIds) >= 4) break; // safety limit
+                if (count($mediaIds) >= 4) break;
 
                 $imagePath = $image->getPathname();
                 $uploadResponse = Http::withToken($accessToken)
@@ -491,7 +500,7 @@ class AdminController extends Controller
         }
 
         // ✅ Create tweet with optional media
-        $payload = ['text' => $request->message];
+        $payload = ['text' => $message];
         if (!empty($mediaIds)) {
             $payload['media'] = ['media_ids' => $mediaIds];
         }
@@ -503,7 +512,12 @@ class AdminController extends Controller
             return response()->json(['error' => $response->json()], 400);
         }
 
-        return response()->json($response->json());
+        $jsonResponse = $response->json();
+        if ($extraNotice) {
+            $jsonResponse['extra'] = $extraNotice;
+        }
+
+        return response()->json($jsonResponse);
     }
 
     public function logoutFromX()

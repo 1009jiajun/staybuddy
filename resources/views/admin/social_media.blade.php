@@ -3,7 +3,7 @@
 @section('page_title', 'Social Media Engagement')
 
 @section('styles')
-<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet" />
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
 <style>
   .x-post-form {
     max-width: 700px;
@@ -96,7 +96,7 @@ function showToast(message, type = 'success') {
   toast.textContent = message;
   toast.className = 'toast ' + type;
   toast.style.display = 'block';
-  setTimeout(() => toast.style.display = 'none', 4000);
+  setTimeout(() => toast.style.display = 'none', 5000);
 }
 
 const quill = new Quill('#editor', {
@@ -106,14 +106,14 @@ const quill = new Quill('#editor', {
 
 // Redirect to backend for X OAuth
 document.getElementById('xLoginBtn')?.addEventListener('click', function() {
-  window.location.href = '/admin/x-auth/redirect';
+  window.location.href = '/x-auth/redirect';
 });
 
 // Post message to X
 document.getElementById('xPostForm')?.addEventListener('submit', async function(e) {
   e.preventDefault();
 
-  const plainText = quill.getText().trim(); // tweet text (max 280 chars)
+  const plainText = quill.getText().trim();
   if (!plainText) {
     showToast("⚠️ Message cannot be empty", "error");
     return;
@@ -143,7 +143,8 @@ document.getElementById('xPostForm')?.addEventListener('submit', async function(
 
     let result = await res.json();
     if (result.data?.id) {
-      showToast("✅ Successfully posted to X!", "success");
+      let extraMsg = result.extra ? " (⚠️ " + result.extra + ")" : "";
+      showToast("✅ Successfully posted to X!" + extraMsg, "success");
       quill.setText("");
       document.getElementById("imageInput").value = "";
     } else {
