@@ -397,7 +397,7 @@ class AdminController extends Controller
         $clientId = env('X_CLIENT_ID');
         $redirectUri = urlencode(env('X_REDIRECT_URI')); // encode
         $state = bin2hex(random_bytes(16)); // CSRF protection
-        $scope = urlencode('tweet.read users.read tweet.write offline.access'); // encode
+        $scope = urlencode('tweet.read users.read tweet.write offline.access media.write'); // encode
 
         // Generate a random code_verifier
         $codeVerifier = bin2hex(random_bytes(64)); 
@@ -454,38 +454,31 @@ class AdminController extends Controller
     public function postToX(Request $request)
     {
         try {
-
             $request->validate([
-                'message'   => 'required|string',
-                'images'    => 'nullable|array',  // 👈 must declare as array
+                'message' => 'required|string',
+                'images'  => 'nullable|array',
             ]);
 
-            $filePath = Storage::disk('local')->path('x_token.json');
-            if (!file_exists($filePath)) {
+            // Check for stored OAuth2 token
+            if (!Storage::disk('local')->exists('x_token.json')) {
                 return response()->json([
-                    'error' => 'No X credentials found. Login first.',
-                    'debug_path' => $filePath,
-                    'real_files' => glob(storage_path('app/private/*'))
+                    'error' => 'No X credentials found. Login first.'
                 ], 400);
             }
 
-            if (!Storage::disk('local')->exists('x_token.json')) {
-                return response()->json(['error' => 'No X credentials found. Login first.'], 400);
-            }
-
             $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
-            $accessToken = $config['access_token'] ?? null; // v2 posting
-            $oauthToken = $config['oauth_token'] ?? null;   // v1.1 media upload
-            $oauthSecret = $config['oauth_token_secret'] ?? null;
+            $accessToken = $config['access_token'] ?? null;
 
-            if (!$accessToken || !$oauthToken || !$oauthSecret) {
-                return response()->json(['error' => 'Missing required tokens. Please re-login.'], 400);
+            if (!$accessToken) {
+                return response()->json([
+                    'error' => 'Missing access token. Please re-login.'
+                ], 400);
             }
 
             $message = $request->message;
             $extraNotice = null;
 
-            // ✅ Truncate if > 280 chars
+            // Truncate to 280 characters
             if (mb_strlen($message, 'UTF-8') > 280) {
                 $extraNotice = "Message truncated. " . (mb_strlen($message, 'UTF-8') - 280) . " characters not sent.";
                 $message = mb_substr($message, 0, 280, 'UTF-8');
@@ -493,63 +486,59 @@ class AdminController extends Controller
 
             $mediaIds = [];
 
-            // ✅ Handle multiple image uploads (max 4)
+            // Step 1: Upload media using v2 endpoint
             if ($request->hasFile('images')) {
                 foreach ($request->file('images') as $image) {
                     if (count($mediaIds) >= 4) break;
 
-                    $uploadResponse = Http::withOAuth1(
-                            env('X_CLIENT_ID'),
-                            env('X_CLIENT_SECRET'),
-                            $oauthToken,
-                            $oauthSecret
-                        )
-                        ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
-                        ->post('https://upload.twitter.com/1.1/media/upload.json');
+                    // Upload media
+                    $uploadResponse = Http::withToken($accessToken)
+                        ->attach('file', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
+                        ->post('https://api.twitter.com/2/media/upload', [
+                            'media_category' => 'tweet_image'
+                        ]);
 
                     if ($uploadResponse->failed()) {
-                        \Log::error('X Image Upload Failed', [
+                        \Log::error('X Media Upload Failed', [
                             'status' => $uploadResponse->status(),
                             'response' => $uploadResponse->json(),
                             'image' => $image->getClientOriginalName()
                         ]);
                         return response()->json([
-                            'error' => 'Image upload failed',
+                            'error' => 'Media upload failed',
                             'details' => $uploadResponse->json(),
                             'status' => $uploadResponse->status()
                         ], 400);
                     }
 
                     $mediaData = $uploadResponse->json();
-                    \Log::info('X Image Upload Response', $mediaData);
-
-                    if (!empty($mediaData['media_id_string'])) {
-                        $mediaIds[] = $mediaData['media_id_string'];
+                    if (!empty($mediaData['data']['media_id'])) {
+                        $mediaIds[] = $mediaData['data']['media_id'];
                     } else {
-                        \Log::warning('No media_id_string in response', $mediaData);
+                        \Log::warning('No media_id returned', $mediaData);
                     }
                 }
             }
 
-            // ✅ Create tweet with optional media
+            // Step 2: Create tweet with media_ids
             $payload = ['text' => $message];
             if (!empty($mediaIds)) {
                 $payload['media'] = ['media_ids' => $mediaIds];
             }
 
-            $response = Http::withToken($accessToken) // v2 post
+            $tweetResponse = Http::withToken($accessToken)
                 ->post('https://api.twitter.com/2/tweets', $payload);
 
-            if ($response->failed()) {
+            if ($tweetResponse->failed()) {
                 \Log::error('X Tweet Post Failed', [
-                    'status' => $response->status(),
-                    'response' => $response->json(),
+                    'status' => $tweetResponse->status(),
+                    'response' => $tweetResponse->json(),
                     'payload' => $payload
                 ]);
-                return response()->json(['error' => $response->json()], 400);
+                return response()->json(['error' => $tweetResponse->json()], 400);
             }
 
-            $jsonResponse = $response->json();
+            $jsonResponse = $tweetResponse->json();
             if ($extraNotice) {
                 $jsonResponse['extra'] = $extraNotice;
             }
@@ -566,6 +555,7 @@ class AdminController extends Controller
             return response()->json(['error' => 'Server error: ' . $e->getMessage()], 500);
         }
     }
+
 
 
     public function logoutFromX()
