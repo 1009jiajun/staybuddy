@@ -478,23 +478,58 @@ class AdminController extends Controller
 
         $mediaIds = [];
 
-        // ✅ Handle multiple image uploads (max 4)
+        // ✅ Handle multiple image uploads (max 4) - FIXED VERSION
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 if (count($mediaIds) >= 4) break;
 
-                $imagePath = $image->getPathname();
-                $uploadResponse = Http::withToken($accessToken)
-                    ->attach('media', file_get_contents($imagePath), $image->getClientOriginalName())
-                    ->post('https://upload.twitter.com/1.1/media/upload.json');
+                try {
+                    // Method 1: Using asMultipart() - Recommended
+                    $uploadResponse = Http::withToken($accessToken)
+                        ->asMultipart()
+                        ->attach('media', file_get_contents($image->getPathname()), $image->getClientOriginalName())
+                        ->post('https://upload.twitter.com/1.1/media/upload.json');
 
-                if ($uploadResponse->failed()) {
-                    return response()->json(['error' => 'Image upload failed', 'details' => $uploadResponse->json()], 400);
-                }
+                    // Alternative Method 2: Using direct form data
+                    /*
+                    $uploadResponse = Http::withToken($accessToken)
+                        ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
+                        ->post('https://upload.twitter.com/1.1/media/upload.json');
+                    */
 
-                $mediaData = $uploadResponse->json();
-                if (!empty($mediaData['media_id_string'])) {
-                    $mediaIds[] = $mediaData['media_id_string'];
+                    // Alternative Method 3: Using cURL directly if HTTP client fails
+                    /*
+                    $uploadResponse = $this->uploadImageWithCurl($accessToken, $image);
+                    */
+
+                    if ($uploadResponse->failed()) {
+                        \Log::error('X Image Upload Failed', [
+                            'status' => $uploadResponse->status(),
+                            'response' => $uploadResponse->json(),
+                            'image' => $image->getClientOriginalName()
+                        ]);
+                        return response()->json([
+                            'error' => 'Image upload failed', 
+                            'details' => $uploadResponse->json(),
+                            'status' => $uploadResponse->status()
+                        ], 400);
+                    }
+
+                    $mediaData = $uploadResponse->json();
+                    \Log::info('X Image Upload Response', $mediaData);
+
+                    if (!empty($mediaData['media_id_string'])) {
+                        $mediaIds[] = $mediaData['media_id_string'];
+                    } else {
+                        \Log::warning('No media_id_string in response', $mediaData);
+                    }
+
+                } catch (\Exception $e) {
+                    \Log::error('X Image Upload Exception', [
+                        'error' => $e->getMessage(),
+                        'image' => $image->getClientOriginalName()
+                    ]);
+                    return response()->json(['error' => 'Image upload exception: ' . $e->getMessage()], 500);
                 }
             }
         }
@@ -505,19 +540,62 @@ class AdminController extends Controller
             $payload['media'] = ['media_ids' => $mediaIds];
         }
 
-        $response = Http::withToken($accessToken)
-            ->post('https://api.twitter.com/2/tweets', $payload);
+        try {
+            $response = Http::withToken($accessToken)
+                ->post('https://api.twitter.com/2/tweets', $payload);
 
-        if ($response->failed()) {
-            return response()->json(['error' => $response->json()], 400);
+            if ($response->failed()) {
+                \Log::error('X Tweet Post Failed', [
+                    'status' => $response->status(),
+                    'response' => $response->json(),
+                    'payload' => $payload
+                ]);
+                return response()->json(['error' => $response->json()], 400);
+            }
+
+            $jsonResponse = $response->json();
+            if ($extraNotice) {
+                $jsonResponse['extra'] = $extraNotice;
+            }
+
+            return response()->json($jsonResponse);
+
+        } catch (\Exception $e) {
+            \Log::error('X Tweet Post Exception', ['error' => $e->getMessage()]);
+            return response()->json(['error' => 'Tweet post failed: ' . $e->getMessage()], 500);
         }
+    }
 
-        $jsonResponse = $response->json();
-        if ($extraNotice) {
-            $jsonResponse['extra'] = $extraNotice;
-        }
+    // Alternative cURL method if HTTP client doesn't work
+    private function uploadImageWithCurl($accessToken, $image)
+    {
+        $curl = curl_init();
+        
+        $postFields = [
+            'media' => new \CURLFile($image->getPathname(), $image->getMimeType(), $image->getClientOriginalName())
+        ];
 
-        return response()->json($jsonResponse);
+        curl_setopt_array($curl, [
+            CURLOPT_URL => 'https://upload.twitter.com/1.1/media/upload.json',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $postFields,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $accessToken,
+                'Content-Type: multipart/form-data'
+            ],
+        ]);
+
+        $response = curl_exec($curl);
+        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
+        curl_close($curl);
+
+        return new class($response, $httpCode) {
+            public function __construct(private $response, private $httpCode) {}
+            public function failed() { return $this->httpCode >= 400; }
+            public function json() { return json_decode($this->response, true); }
+            public function status() { return $this->httpCode; }
+        };
     }
 
     public function logoutFromX()

@@ -69,7 +69,7 @@
 <div class="x-post-form" style="{{ $hasToken ? 'display:block;' : 'display:none;' }}">
   <h3>Promote Accommodation on X</h3>
   <form id="xPostForm" enctype="multipart/form-data">
-    <label for="message">Post Message:</label>
+    <label for="message">Post Message (Max 280 characters):</label>
     <div id="editor" class="quill-editor"></div>
 
     <label for="image">Upload Images (max 4):</label>
