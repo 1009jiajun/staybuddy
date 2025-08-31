@@ -455,30 +455,18 @@ class AdminController extends Controller
     {
         try {
 
-            // Temporary debug response
+            $rules = [
+                'message' => 'required|string',
+                'images'  => 'nullable',
+            ];
+
+            // If it’s multiple
             if ($request->hasFile('images')) {
-                return response()->json([
-                    'message' => $request->message,
-                    'files'   => collect($request->file('images'))->map(function ($file) {
-                        return [
-                            'name' => $file->getClientOriginalName(),
-                            'mime' => $file->getClientMimeType(),
-                            'size' => $file->getSize(),
-                        ];
-                    }),
-                ]);
+                $rules['images']   = 'array';
+                $rules['images.*'] = 'file|mimes:jpeg,png,jpg,gif,webp|max:5120';
             }
 
-            return response()->json([
-                'message' => $request->message,
-                'all'     => $request->all(),
-                'files'   => $request->allFiles(),
-            ]);
-            $request->validate([
-                'message' => 'required|string',
-                'images'   => 'nullable',
-                'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
-            ]);
+            $request->validate($rules);
 
             if (!Storage::disk('local')->exists('x_token.json')) {
                 return response()->json(['error' => 'No X credentials found. Login first.'], 400);
