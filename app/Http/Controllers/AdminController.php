@@ -455,18 +455,12 @@ class AdminController extends Controller
     {
         try {
 
-            $rules = [
-                'message' => 'required|string',
-                'images'  => 'nullable',
-            ];
+            $request->validate([
+                'message'   => 'required|string',
+                'images'    => 'nullable|array',  // 👈 must declare as array
+                'images.*'  => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
+            ]);
 
-            // If it’s multiple
-            if ($request->hasFile('images')) {
-                $rules['images']   = 'array';
-                $rules['images.*'] = 'file|mimes:jpeg,png,jpg,gif,webp|max:5120';
-            }
-
-            $request->validate($rules);
 
             if (!Storage::disk('local')->exists('x_token.json')) {
                 return response()->json(['error' => 'No X credentials found. Login first.'], 400);
