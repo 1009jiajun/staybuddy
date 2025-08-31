@@ -458,6 +458,7 @@ class AdminController extends Controller
             $request->validate([
                 'message' => 'required|string',
                 'images'  => 'nullable|array|max:4',
+                'images.*'=> 'file|mimes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max per image
             ]);
 
             // Load OAuth2 user-context token
@@ -544,7 +545,7 @@ class AdminController extends Controller
                 'media_category' => 'tweet_image'
             ])->throw()->json();
 
-        $mediaId = $initResponse['media_id'] ?? null;
+        $mediaId = $initResponse['data']['id'] ?? null;
         if (!$mediaId) {
             throw new \Exception('Media initialization failed: ' . json_encode($initResponse));
         }
