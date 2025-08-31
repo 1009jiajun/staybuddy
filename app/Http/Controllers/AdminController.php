@@ -413,7 +413,7 @@ class AdminController extends Controller
     public function handleXCallback(Request $request)
     {
         $code = $request->query('code');
-        $codeVerifier = session('x_code_verifier'); // retrieve from session
+        $codeVerifier = session('x_code_verifier');
 
         if (!$codeVerifier) {
             return redirect('/admin/social-media')->with('error', 'Missing code_verifier. Try logging in again.');
@@ -437,14 +437,16 @@ class AdminController extends Controller
             return redirect('/admin/social-media')->with('error', $tokens['error_description'] ?? $tokens['error']);
         }
 
-        // Save tokens
-        Storage::disk('local')->put('x_token.json', json_encode([
-            'access_token' => $tokens['access_token'],
-            'refresh_token' => $tokens['refresh_token'] ?? null,
-        ]));
+        // Merge with OAuth1 tokens if already stored
+        $stored = json_decode(Storage::disk('local')->get('x_token.json', '{}'), true);
+        $stored['access_token'] = $tokens['access_token'];
+        $stored['refresh_token'] = $tokens['refresh_token'] ?? null;
+
+        Storage::disk('local')->put('x_token.json', json_encode($stored));
 
         return redirect('/admin/social-media')->with('x_logged_in', true);
     }
+
 
 
     // Post message to X
@@ -457,14 +459,16 @@ class AdminController extends Controller
         ]);
 
         if (!Storage::disk('local')->exists('x_token.json')) {
-            return response()->json(['error' => 'No X access token found. Login first.'], 400);
+            return response()->json(['error' => 'No X credentials found. Login first.'], 400);
         }
 
         $config = json_decode(Storage::disk('local')->get('x_token.json'), true);
-        $accessToken = $config['access_token'] ?? null;
+        $accessToken = $config['access_token'] ?? null; // v2 posting
+        $oauthToken = $config['oauth_token'] ?? null;   // v1.1 media upload
+        $oauthSecret = $config['oauth_token_secret'] ?? null;
 
-        if (!$accessToken) {
-            return response()->json(['error' => 'No X access token found. Login first.'], 400);
+        if (!$accessToken || !$oauthToken || !$oauthSecret) {
+            return response()->json(['error' => 'Missing required tokens. Please re-login.'], 400);
         }
 
         $message = $request->message;
@@ -478,29 +482,20 @@ class AdminController extends Controller
 
         $mediaIds = [];
 
-        // ✅ Handle multiple image uploads (max 4) - FIXED VERSION
+        // ✅ Handle multiple image uploads (max 4)
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $image) {
                 if (count($mediaIds) >= 4) break;
 
                 try {
-                    // Method 1: Using asMultipart() - Recommended
-                    // $uploadResponse = Http::withToken($accessToken)
-                    // ->timeout(120) // 120 seconds instead of 30
-                    // ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
-                    // ->post('https://api.twitter.com/2/media/upload');
-
-                    // Alternative Method 2: Using direct form data
-                    /*
-                    $uploadResponse = Http::withToken($accessToken)
+                    $uploadResponse = Http::withOAuth1(
+                            env('X_CLIENT_ID'),
+                            env('X_CLIENT_SECRET'),
+                            $oauthToken,
+                            $oauthSecret
+                        )
                         ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
                         ->post('https://upload.twitter.com/1.1/media/upload.json');
-                    */
-
-                    // Alternative Method 3: Using cURL directly if HTTP client fails
-                    
-                    $uploadResponse = $this->uploadImageWithCurl($accessToken, $image);
-                    
 
                     if ($uploadResponse->failed()) {
                         \Log::error('X Image Upload Failed', [
@@ -508,9 +503,8 @@ class AdminController extends Controller
                             'response' => $uploadResponse->json(),
                             'image' => $image->getClientOriginalName()
                         ]);
-                        error_log("X Image Upload Failed: " . $uploadResponse->body());
                         return response()->json([
-                            'error' => 'Image upload failed', 
+                            'error' => 'Image upload failed',
                             'details' => $uploadResponse->json(),
                             'status' => $uploadResponse->status()
                         ], 400);
@@ -530,7 +524,6 @@ class AdminController extends Controller
                         'error' => $e->getMessage(),
                         'image' => $image->getClientOriginalName()
                     ]);
-                    error_log("X Image Upload Exception: " . $e->getMessage());
                     return response()->json(['error' => 'Image upload exception: ' . $e->getMessage()], 500);
                 }
             }
@@ -543,7 +536,7 @@ class AdminController extends Controller
         }
 
         try {
-            $response = Http::withToken($accessToken)
+            $response = Http::withToken($accessToken) // v2 post
                 ->post('https://api.twitter.com/2/tweets', $payload);
 
             if ($response->failed()) {
@@ -552,7 +545,6 @@ class AdminController extends Controller
                     'response' => $response->json(),
                     'payload' => $payload
                 ]);
-                error_log("X Tweet Post Failed: " . $response->body());
                 return response()->json(['error' => $response->json()], 400);
             }
 
@@ -565,41 +557,8 @@ class AdminController extends Controller
 
         } catch (\Exception $e) {
             \Log::error('X Tweet Post Exception', ['error' => $e->getMessage()]);
-            error_log("X Tweet Post Exception: " . $e->getMessage());
             return response()->json(['error' => 'Tweet post failed: ' . $e->getMessage()], 500);
         }
-    }
-
-    // Alternative cURL method if HTTP client doesn't work
-    private function uploadImageWithCurl($accessToken, $image)
-    {
-        $curl = curl_init();
-        
-        $postFields = [
-            'media' => new \CURLFile($image->getPathname(), $image->getMimeType(), $image->getClientOriginalName())
-        ];
-
-        curl_setopt_array($curl, [
-            CURLOPT_URL => 'https://api.twitter.com/2/media/upload',
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $postFields,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Bearer ' . $accessToken,
-                'Content-Type: multipart/form-data'
-            ],
-        ]);
-
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        curl_close($curl);
-
-        return new class($response, $httpCode) {
-            public function __construct(private $response, private $httpCode) {}
-            public function failed() { return $this->httpCode >= 400; }
-            public function json() { return json_decode($this->response, true); }
-            public function status() { return $this->httpCode; }
-        };
     }
 
     public function logoutFromX()
