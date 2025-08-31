@@ -458,7 +458,6 @@ class AdminController extends Controller
             $request->validate([
                 'message'   => 'required|string',
                 'images'    => 'nullable|array',  // 👈 must declare as array
-                'images.*'  => 'mimes:jpeg,png,jpg,gif,webp|max:5120',
             ]);
 
 
