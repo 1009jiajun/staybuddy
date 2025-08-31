@@ -129,9 +129,9 @@ document.getElementById('xPostForm')?.addEventListener('submit', async function(
   }
 
   for (let i = 0; i < imageFiles.length; i++) {
-    formData.append("images[]", imageFiles[i]);
+    formData.append(`images[${i}]`, imageFiles[i]);  // ✅ indexed key
   }
-  
+
   try {
     let res = await fetch('/admin/post-to-x', {
       method: 'POST',

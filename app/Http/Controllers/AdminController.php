@@ -456,7 +456,7 @@ class AdminController extends Controller
         try {
             $request->validate([
                 'message' => 'required|string',
-                'images'   => 'nullable|array|max:4',
+                'images'   => 'nullable',
                 'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
             ]);
 
