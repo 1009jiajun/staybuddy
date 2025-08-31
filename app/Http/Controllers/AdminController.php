@@ -485,10 +485,10 @@ class AdminController extends Controller
 
                 try {
                     // Method 1: Using asMultipart() - Recommended
-                    $uploadResponse = Http::withToken($accessToken)
-                    ->timeout(120) // 120 seconds instead of 30
-                    ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
-                    ->post('https://api.twitter.com/2/media/upload');
+                    // $uploadResponse = Http::withToken($accessToken)
+                    // ->timeout(120) // 120 seconds instead of 30
+                    // ->attach('media', fopen($image->getPathname(), 'r'), $image->getClientOriginalName())
+                    // ->post('https://api.twitter.com/2/media/upload');
 
                     // Alternative Method 2: Using direct form data
                     /*
@@ -498,9 +498,9 @@ class AdminController extends Controller
                     */
 
                     // Alternative Method 3: Using cURL directly if HTTP client fails
-                    /*
+                    
                     $uploadResponse = $this->uploadImageWithCurl($accessToken, $image);
-                    */
+                    
 
                     if ($uploadResponse->failed()) {
                         \Log::error('X Image Upload Failed', [
@@ -580,7 +580,7 @@ class AdminController extends Controller
         ];
 
         curl_setopt_array($curl, [
-            CURLOPT_URL => 'https://upload.twitter.com/1.1/media/upload.json',
+            CURLOPT_URL => 'https://api.twitter.com/2/media/upload',
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $postFields,
