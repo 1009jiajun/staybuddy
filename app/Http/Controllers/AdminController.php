@@ -455,12 +455,10 @@ class AdminController extends Controller
     {
         try {
 
-            dd($request->all(), $request->allFiles());
-
             $request->validate([
                 'message'   => 'required|string',
                 'images'    => 'nullable|array',  // 👈 must declare as array
-                'images.*'  => 'file|mimes:jpeg,png,jpg,gif,webp|max:5120',
+                'images.*'  => 'mimes:jpeg,png,jpg,gif,webp|max:5120',
             ]);
 
 
