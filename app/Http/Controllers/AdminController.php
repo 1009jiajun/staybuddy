@@ -458,7 +458,6 @@ class AdminController extends Controller
             $request->validate([
                 'message' => 'required|string',
                 'images'  => 'nullable|array|max:4',
-                'images.*'=> 'file|mimetypes:jpeg,png,jpg,gif,webp|max:5120', // 5MB max per image
             ]);
 
             // Load OAuth2 user-context token
