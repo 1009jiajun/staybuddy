@@ -22,11 +22,6 @@ class AppServiceProvider extends ServiceProvider
     {
         // Force Laravel to always use your tunnel domain
         URL::forceRootUrl(config('app.url'));
-        if (config('app.env') !== 'local') {
-            URL::forceScheme('https');
-        }
-        if (config('app.env') === 'production') {
-            URL::forceScheme('https');
-        }
+        URL::forceScheme('https');
     }
 }
